@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --color-goat: #22c55e;
+  --color-goat-dark: #15803d;
+  --color-danger: #ef4444;
+  --color-warning: #eab308;
+}
+
+body {
+  background: linear-gradient(135deg, #0a0a0a 0%, #111827 50%, #0a0a0a 100%);
+  background-attachment: fixed;
+}
+
+/* Terminal-style text effect */
+.terminal-text {
+  font-family: 'JetBrains Mono', monospace;
+  text-shadow: 0 0 10px var(--color-goat);
+}
+
+/* Glowing border effect */
+.glow-border {
+  border: 1px solid var(--color-goat);
+  box-shadow: 0 0 10px var(--color-goat), inset 0 0 10px rgba(34, 197, 94, 0.1);
+}
+
+/* Flag captured animation */
+@keyframes flag-capture {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.flag-captured {
+  animation: flag-capture 0.5s ease-in-out;
+}
+
+/* Scanline effect */
+.scanlines::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 2px,
+    rgba(0, 0, 0, 0.1) 4px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Card styles */
+.vuln-card {
+  @apply bg-gray-900/50 border border-gray-800 rounded-lg p-4 transition-all duration-300;
+}
+
+.vuln-card:hover {
+  @apply border-goat-500/50 shadow-lg shadow-goat-500/10;
+}
+
+/* Difficulty badges */
+.badge-easy {
+  @apply bg-green-500/20 text-green-400 border border-green-500/30;
+}
+
+.badge-medium {
+  @apply bg-yellow-500/20 text-yellow-400 border border-yellow-500/30;
+}
+
+.badge-hard {
+  @apply bg-red-500/20 text-red-400 border border-red-500/30;
+}
+
+/* Service badges */
+.badge-voicebank {
+  @apply bg-blue-500/20 text-blue-400 border border-blue-500/30;
+}
+
+.badge-voiceadmin {
+  @apply bg-purple-500/20 text-purple-400 border border-purple-500/30;
+}
+
+.badge-voicerag {
+  @apply bg-orange-500/20 text-orange-400 border border-orange-500/30;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}

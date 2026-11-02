@@ -1,0 +1,326 @@
+# =============================================================================
+# VoiceGoat Docker Compose - Local Development Stack
+# =============================================================================
+#
+# Usage:
+#   cp .env.example .env          # create your environment file
+#   docker compose up -d          # start all services
+#   docker compose logs -f        # follow logs
+#   docker compose down -v        # stop and remove data volumes
+#
+# The default LLM_PROVIDER=mock requires no API keys.
+# Set LLM_PROVIDER=openai and OPENAI_API_KEY in .env for real LLM responses.
+#
+# Port map:
+#   8000  Nginx gateway (unified entry point)
+#   8001  VoiceBank   (LLM01: Prompt Injection)
+#   8002  VoiceAdmin  (LLM06: Excessive Agency)
+#   8003  VoiceRAG    (LLM08: Vector Weaknesses)
+#   8004  Voice Gateway (Twilio integration)
+#   4000  Dashboard   (Next.js CTF interface)
+#   4001  Grafana     (optional monitoring)
+#   5432  Postgres    6379  Redis    9200  OpenSearch
+#   5601  OpenSearch Dashboards    4566  LocalStack
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # VoiceBank - LLM01: Prompt Injection
+  # Banking assistant vulnerable to direct, indirect, and obfuscated injections
+  # ---------------------------------------------------------------------------
+  voicebank:
+    build:
+      context: .
+      dockerfile: services/voicebank/Dockerfile
+    container_name: voicegoat-voicebank
+    ports:
+      - "8001:8000"
+    environment:
+      - ENVIRONMENT=local
+      - SPEECH_MODE=text
+      - DEBUG=true
+      - REDIS_URL=redis://redis:6379
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+    volumes:
+      - ./services:/app/services:ro
+    depends_on:
+      - redis
+      - localstack
+    networks:
+      - voicegoat
+    labels:
+      - "voicegoat.service=voicebank"
+      - "voicegoat.vulnerability=LLM01"
+
+  # ---------------------------------------------------------------------------
+  # VoiceAdmin - LLM06: Excessive Agency
+  # Admin console with overprivileged tools and no human-in-the-loop
+  # ---------------------------------------------------------------------------
+  voiceadmin:
+    build:
+      context: .
+      dockerfile: services/voiceadmin/Dockerfile
+    container_name: voicegoat-voiceadmin
+    ports:
+      - "8002:8000"
+    environment:
+      - ENVIRONMENT=local
+      - SPEECH_MODE=text
+      - DEBUG=true
+      - REDIS_URL=redis://redis:6379
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      # Intentionally overprivileged DB connection for LLM06 demonstration
+      - DB_CONNECTION_STRING=postgresql://admin:admin@postgres:5432/voicegoat
+    volumes:
+      - ./services:/app/services:ro
+    depends_on:
+      - redis
+      - postgres
+      - localstack
+    networks:
+      - voicegoat
+    labels:
+      - "voicegoat.service=voiceadmin"
+      - "voicegoat.vulnerability=LLM06"
+
+  # ---------------------------------------------------------------------------
+  # VoiceRAG - LLM08: Vector & Embedding Weaknesses
+  # Knowledge base with flawed tenant isolation and no content validation
+  # ---------------------------------------------------------------------------
+  voicerag:
+    build:
+      context: .
+      dockerfile: services/voicerag/Dockerfile
+    container_name: voicegoat-voicerag
+    ports:
+      - "8003:8000"
+    environment:
+      - ENVIRONMENT=local
+      - SPEECH_MODE=text
+      - DEBUG=true
+      - REDIS_URL=redis://redis:6379
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - OPENSEARCH_ENDPOINT=http://opensearch:9200
+    volumes:
+      - ./services:/app/services:ro
+      - ./services/voicerag/knowledge_base:/app/knowledge_base:rw
+    depends_on:
+      - redis
+      - opensearch
+      - localstack
+    networks:
+      - voicegoat
+    labels:
+      - "voicegoat.service=voicerag"
+      - "voicegoat.vulnerability=LLM08"
+
+  # ---------------------------------------------------------------------------
+  # Dashboard - Next.js CTF scoreboard and chat interface
+  # Accessible at http://localhost:4000 (direct) or http://localhost:8000 (via gateway)
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: voicegoat-dashboard
+    ports:
+      - "4000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_VOICEBANK_URL=http://localhost:8001
+      - NEXT_PUBLIC_VOICEADMIN_URL=http://localhost:8002
+      - NEXT_PUBLIC_VOICERAG_URL=http://localhost:8003
+    depends_on:
+      - voicebank
+      - voiceadmin
+      - voicerag
+    networks:
+      - voicegoat
+    labels:
+      - "voicegoat.service=dashboard"
+
+  # ---------------------------------------------------------------------------
+  # Voice Gateway - Twilio phone call integration
+  # Bridges Twilio Media Streams to backend services via WebSocket + HTTP
+  # See docs/TWILIO_SETUP.md for configuration instructions
+  # ---------------------------------------------------------------------------
+  voice-gateway:
+    build:
+      context: .
+      dockerfile: services/voice_gateway/Dockerfile
+    container_name: voicegoat-voice-gateway
+    ports:
+      - "8004:8000"
+    environment:
+      - ENVIRONMENT=local
+      - DEBUG=true
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - VOICEBANK_URL=http://voicebank:8000
+      - VOICEADMIN_URL=http://voiceadmin:8000
+      - VOICERAG_URL=http://voicerag:8000
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+    volumes:
+      - ./services:/app/services:ro
+    depends_on:
+      - voicebank
+      - voiceadmin
+      - voicerag
+    networks:
+      - voicegoat
+    labels:
+      - "voicegoat.service=voice-gateway"
+      - "voicegoat.description=Twilio voice integration"
+
+  # ---------------------------------------------------------------------------
+  # Nginx Gateway - Unified reverse proxy on port 8000
+  # Routes / to dashboard, /api/voicebank/ to VoiceBank, etc.
+  # ---------------------------------------------------------------------------
+  gateway:
+    image: nginx:alpine
+    container_name: voicegoat-gateway
+    ports:
+      - "8000:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - voicebank
+      - voiceadmin
+      - voicerag
+      - dashboard
+    networks:
+      - voicegoat
+
+  # ---------------------------------------------------------------------------
+  # Supporting Infrastructure
+  # ---------------------------------------------------------------------------
+
+  # Redis - session/cache store
+  redis:
+    image: redis:7-alpine
+    container_name: voicegoat-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - voicegoat
+
+  # Postgres - stores banking/admin/secrets schemas (init via docker/init-db.sql)
+  postgres:
+    image: postgres:16-alpine
+    container_name: voicegoat-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=voicegoat
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - voicegoat
+
+  # OpenSearch - vector database (VoiceRAG currently uses in-memory mock; reserved for future use)
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: voicegoat-opensearch
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=admin
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - voicegoat
+
+  # OpenSearch Dashboards - UI for OpenSearch (optional)
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.11.0
+    container_name: voicegoat-opensearch-dashboards
+    ports:
+      - "5601:5601"
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    depends_on:
+      - opensearch
+    networks:
+      - voicegoat
+
+  # LocalStack - mocks AWS DynamoDB (flags), S3 (documents), and Secrets Manager
+  localstack:
+    image: localstack/localstack:latest
+    container_name: voicegoat-localstack
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=dynamodb,s3,secretsmanager
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker/localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro
+    networks:
+      - voicegoat
+
+  # ---------------------------------------------------------------------------
+  # Observability (optional)
+  # ---------------------------------------------------------------------------
+
+  # Grafana - monitoring dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: voicegoat-grafana
+    ports:
+      - "4001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - voicegoat
+
+networks:
+  voicegoat:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:
+  opensearch_data:
+  localstack_data:
+  grafana_data:
